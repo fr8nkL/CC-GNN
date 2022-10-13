@@ -21,3 +21,15 @@ python train_super_graph.py --dataset cora --gpu 0
 ```
 
 for GNN training. The detailed descriptions of available parameters to pass can be found in the python scripts.
+
+The links to other baselines can be found here.
+
+| Model|Code|
+| ---------- | ---------- |
+| GraphSAGE  | https://github.com/williamleif/GraphSAGE|
+| FastGCN    | https://github.com/matenure/FastGCN|
+| ClusterGCN | https://github.com/google-research/google-research/tree/master/cluster_gcn|
+| GraphSAINT | https://github.com/GraphSAINT/GraphSAINT|
+| GBP        | https://github.com/chennnM/GBP|
+| GCoarsen   | https://github.com/szzhang17/Scaling-Up-Graph-Neural-Networks-Via-Graph-Coarsening|
+| GCOND      | https://github.com/ChandlerBang/GCond|
