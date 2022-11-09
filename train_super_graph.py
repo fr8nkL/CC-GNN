@@ -137,10 +137,6 @@ def get_train_val_test_split(args, community2node, original_test_mask, n_communi
         else:
             print('Use {:.2%} of all available communities for training'.format(1 - args.test_split_ratio))
             train_mask_, val_mask_, test_mask_ = generate_masks_from_idx(available_communities, n_communities, test_size=args.test_split_ratio)
-            # TODO: optional: add "real" communities to train data, need to handle data between cpu and gpu
-            # train_mask_ = tf.where(generate_mask_from_idx(train_communities, n_communities), [True] * n_communities, train_mask_)
-            # TODO: optional: add test_communities to the test data, need to handle data between cpu and gpu
-            # test_mask_ = tf.logical_or(test_mask_, generate_mask_from_idx(test_communities, n_communities))
             return (train_mask_, val_mask_, test_mask_)
             # super_graph.ndata['train_mask'] = tf.convert_to_tensor(train_mask_, dtype='bool')
             # super_graph.ndata['val_mask'] = tf.convert_to_tensor(val_mask_, dtype='bool')
@@ -250,7 +246,6 @@ def evaluate_original(model, features, labels, mask, n_nodes, node2community, co
         n_test_nodes, num_valid, num_valid/n_test_nodes, num_correct))
     print("Test Accuracy on original graph {:.4f}".format(acc))
     
-    # TODO: delete
     df_data = []
     for c in range(len(set(community2node.keys()))):
         df_data.append([c, len(community2node[c]), community_stat[c][0], community_stat[c][1], 
@@ -259,67 +254,8 @@ def evaluate_original(model, features, labels, mask, n_nodes, node2community, co
     
     return acc
 
-# # wrong version
-# def evaluate_original(model, features, labels, mask, n_nodes, node2community):
-#     # cacluate accuracy by counter
-#     logits = model(features, training=False)
-#     indices_true = tf.math.argmax(labels, axis=1)
-#     indices_pred = tf.math.argmax(logits, axis=1)
-    
-#     test_idx = np.array(range(n_nodes))[mask]
-#     n_test_nodes = len(test_idx)
-
-#     num_correct = 0
-#     num_valid = 0
-#     for node in tqdm(test_idx):
-#         if node in node2community:
-#             num_valid += 1
-#             if indices_true[node2community[node]] == indices_pred[node2community[node]]:
-#                 num_correct += 1
-#     acc = num_correct / num_valid
-#     print("Total test data: {:d} | valid test data: {:d} | valid precent {:2f} | correct {:d}".format(
-#         n_test_nodes, num_valid, num_valid/n_test_nodes, num_correct))
-#     print("Test Accuracy on original graph {:.4f}".format(acc))
-#     return acc
-
-# # wrong version
-# def evaluate_original_tf(model, features, labels, mask, n_nodes, n_communities, community2node):
-#     # calcuate accuracy by tf.reduce
-#     logits = model(features, training=False)
-#     indices_true = tf.math.argmax(labels, axis=1)
-#     indices_pred = tf.math.argmax(logits, axis=1)
-#     # for nodes
-#     y_true = np.zeros(n_nodes, dtype='int64')
-#     y_pred = np.zeros(n_nodes, dtype='int64')
-#     for i in tqdm(range(n_communities)):
-#         for node in community2node[i]:
-#             y_true[node] = indices_true[i]
-#             y_pred[node] = indices_pred[i]
-#     # acc = tf.reduce_mean(tf.cast(y_pred == y_true, dtype=tf.float32)).numpy().item()
-#     # print("All Accuracy on original graph {:.4f}".format(acc))
-#     # test nodes
-#     # test_mask = graph.ndata['test_mask']# .numpy()
-#     y_true = y_true[mask]
-#     y_pred = y_pred[mask]
-#     acc = tf.reduce_mean(tf.cast(y_pred == y_true, dtype=tf.float32)).numpy().item()
-#     print("Test Accuracy on original graph {:.4f}".format(acc))
-#     return acc
-
 def load_data(args):
     if args.dataset == 'ogb':
-        # TODO: bug with DGL: dgl._ffi.base.DGLError: Cannot assign node feature "label" on device /gpu:0 to a graph on device /cpu.
-        # Call DGLGraph.to()
-        # dataset = DglNodePropPredDataset(name='ogbn-products', root=args.ogb_dir)
-        # graph, label = dataset[0] # graph: dgl graph object, label: torch tensor of shape (num_nodes, num_tasks)
-        # graph.ndata['label'] = tf.reshape(label, [-1])
-        # # graph.ndata['label'] = np.array(label, dtype='int32').flatten()
-        # # masks
-        # split_idx = dataset.get_idx_split()
-        # train_idx, val_idx, test_idx = split_idx["train"], split_idx["valid"], split_idx["test"]
-        # n_nodes = graph.num_nodes()
-        # graph.ndata['train_mask'] = generate_mask_from_idx(train_idx, n_nodes)
-        # graph.ndata['val_mask'] = generate_mask_from_idx(val_idx, n_nodes)
-        # graph.ndata['test_mask'] = generate_mask_from_idx(test_idx, n_nodes)
         dataset = DglNodePropPredDataset(name='ogbn-products', root=args.ogb_dir)
         graph, label = dataset[0] # graph: dgl graph object, label: torch tensor of shape (num_nodes, num_tasks)
         split_idx = dataset.get_idx_split()
@@ -403,48 +339,6 @@ def main(args):
         super_graph.ndata['val_mask'], \
         super_graph.ndata['test_mask'] \
         = get_train_val_test_split(args, community2node, original_test_mask, n_communities)
-    # # The below train-val-test split codes are put into the function get_train_val_test_split()
-    # if args.overlap:
-    #     # TODO: CPM only add communities which is not in valid/test of original graph
-    #     # because many nodes do not have community membership and
-    #     # these nodes are assigned to a new community of themselves alone
-    #     print('CPM train-val-test split')
-    #     # one original node is itself a community: len(community2node[community]) == 1
-    #     # and it is in the original test data: sum of corresponding positions of the original test mask is not 0
-    #     # hence it must be test data
-    #     test_communities = [community for community in community2node if len(community2node[community]) == 1 and tf.reduce_sum(tf.gather(tf.cast(original_test_mask, dtype=tf.float32), community2node[community])).numpy().item() > 0.5]
-    #     # communities that can be used for training
-    #     available_communities = list(set(range(n_communities)).difference(set(test_communities)))
-    #     print("num of... | communities: {} | must be test: {} | available for training: {}".format(n_communities, len(test_communities), len(available_communities)))
-    #     # get split
-    #     if args.test_split_ratio == 0.0:
-    #         print('Using all available communities for training')
-    #         super_graph.ndata['train_mask'] = generate_mask_from_idx(available_communities, n_communities)
-    #         super_graph.ndata['val_mask'] = generate_mask_from_idx(available_communities, n_communities)
-    #         super_graph.ndata['test_mask'] = generate_mask_from_idx(available_communities, n_communities)
-    #     else:
-    #         pass
-    #         print('Use {:.2%} of all available communities for training'.format(1 - args.test_split_ratio))
-    #         train_mask_, val_mask_, test_mask_ = generate_masks_from_idx(available_communities, n_communities, test_size=args.test_split_ratio)
-    #         # TODO: optional: add test_communities to the test data
-    #         # test_mask_ = tf.logical_or(test_mask_, generate_mask_from_idx(test_communities, n_communities)) 
-    #         super_graph.ndata['train_mask'] = tf.convert_to_tensor(train_mask_, dtype='bool')
-    #         super_graph.ndata['val_mask'] = tf.convert_to_tensor(val_mask_, dtype='bool')
-    #         super_graph.ndata['test_mask'] = tf.convert_to_tensor(test_mask_, dtype='bool')
-    # else:
-    #     # LPA just split without taking consideration of test cases because no node is itself a community
-    #     print('LPA train-val-test split')
-    #     if args.test_split_ratio == 0.0:
-    #         print('Using all communities for training')
-    #         super_graph.ndata['train_mask'] = tf.convert_to_tensor([True] * n_communities, dtype='bool')
-    #         super_graph.ndata['val_mask'] = tf.convert_to_tensor([True] * n_communities, dtype='bool')
-    #         super_graph.ndata['test_mask'] = tf.convert_to_tensor([True] * n_communities, dtype='bool')
-    #     else:
-    #         print('Use {:.2%} of all communities for training'.format(1 - args.test_split_ratio))
-    #         train_mask_, val_mask_, test_mask_ = generate_masks(n_data=n_communities, test_size=args.test_split_ratio)
-    #         super_graph.ndata['train_mask'] = tf.convert_to_tensor(train_mask_, dtype='bool')
-    #         super_graph.ndata['val_mask'] = tf.convert_to_tensor(val_mask_, dtype='bool')
-    #         super_graph.ndata['test_mask'] = tf.convert_to_tensor(test_mask_, dtype='bool')
 
     # show super graph information
     print(super_graph)
@@ -520,7 +414,7 @@ def main(args):
                 loss_value = tf.math.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(labels=labels[train_mask], logits=logits[train_mask]))
 
                 # Manually Weight Decay
-                # We found Tensorflow has a different implementation on weight decay
+                # Tensorflow has a different implementation on weight decay
                 # of Adam(W) optimizer with PyTorch. And this results in worse results.
                 # Manually adding weights to the loss to do weight decay solves this problem.
                 for weight in model.trainable_weights:
@@ -553,9 +447,6 @@ def main(args):
 
         if args.save_model is True:
             model.save_weights('models/{}/{}{:.4f}/'.format(args.dataset, 'thresholdID_' + str(args.threshold_id) + '_acc_', acc))
-        # # wrong implementations
-        # acc_tf = evaluate_original_tf(model, features, labels, original_test_mask, original_n_nodes, n_communities, community2node)
-        # acc = evaluate_original(model, features, labels, original_test_mask, original_n_nodes, node2community)
         
         t0 = time.time()
         acc = evaluate_original_tf(model, features, original_labels, original_test_mask, original_n_nodes, node2community, args.overlap)
